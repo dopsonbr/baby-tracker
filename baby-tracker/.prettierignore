@@ -1,0 +1,9 @@
+dist/
+node_modules/
+.turbo/
+coverage/
+pnpm-lock.yaml
+.pnpm-store/
+.vercel/
+playwright-report/
+test-results/
