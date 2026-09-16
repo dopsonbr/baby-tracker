@@ -1,0 +1,79 @@
+.welcome {
+  min-height: 100svh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 40px 24px;
+  text-align: center;
+  background:
+    radial-gradient(ellipse at 30% 5%, #ddecf9 0, transparent 65%), #f8fbfd;
+  color: #264a65;
+  font-family: "Geist Variable", sans-serif;
+}
+.welcome-mark {
+  width: 76px;
+  height: 76px;
+  border: 1px solid #c7dfef;
+  border-radius: 24px;
+  background: #e8f3fb;
+  display: grid;
+  place-items: center;
+  color: #4c83ad;
+  transform: rotate(-8deg);
+  margin-bottom: 38px;
+}
+.welcome-eyebrow {
+  font-size: 10px;
+  font-weight: 650;
+  letter-spacing: 0.18em;
+  color: #6b889e;
+  margin: 0 0 22px;
+}
+.welcome h1 {
+  font-size: clamp(38px, 6vw, 64px);
+  line-height: 1.1;
+  letter-spacing: -0.045em;
+  margin: 0;
+  font-weight: 550;
+}
+.welcome h1 em {
+  font-family: Georgia, serif;
+  font-weight: 400;
+  color: #6a99bc;
+}
+.welcome-copy {
+  max-width: 350px;
+  line-height: 1.75;
+  font-size: 15px;
+  color: #718596;
+  margin: 24px 0 32px;
+}
+.welcome-login {
+  min-height: 50px;
+  border-radius: 15px;
+  gap: 24px;
+  padding: 0 25px !important;
+  background: #427fae;
+  color: white;
+  box-shadow: 0 7px 18px #427fae22;
+}
+.welcome-private {
+  font-size: 11px;
+  color: #8092a0;
+  margin-top: 16px;
+}
+.welcome-footer {
+  font-size: 11px;
+  color: #8b9caa;
+  position: absolute;
+  bottom: max(30px, env(safe-area-inset-bottom));
+}
+.welcome-status {
+  max-width: 360px;
+  padding: 15px;
+  background: #e7f1f7;
+  border-radius: 14px;
+  font-size: 14px;
+  line-height: 1.6;
+}
