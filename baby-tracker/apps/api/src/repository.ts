@@ -67,6 +67,7 @@ async function readDay(sql: SqlClient, date: string): Promise<Day> {
     date,
     goalOz: Number(rows[0]!.goal_oz),
     version: Number(rows[0]!.version),
+    caregiverNote: String(rows[0]!.caregiver_note ?? ""),
     events: events.map(eventFromRow),
   }
 }
@@ -88,6 +89,7 @@ async function snapshot(
     date: dateText(d.date),
     goalOz: Number(d.goal_oz),
     version: Number(d.version),
+    caregiverNote: String(d.caregiver_note ?? ""),
     events: events
       .filter((e) => dateText(e.date) === dateText(d.date))
       .map(eventFromRow),

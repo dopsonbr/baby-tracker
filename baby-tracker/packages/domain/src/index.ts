@@ -97,6 +97,7 @@ export const proposalSchema = z
   })
   .strict()
 export const daySchema = z.object({
+  caregiverNote: z.string().max(2000).optional(),
   date: dateSchema,
   goalOz: z.number(),
   version: z.number().int().nonnegative(),
@@ -213,3 +214,26 @@ export function applyOperations(
     (a, b) => a.time.localeCompare(b.time) || a.id.localeCompare(b.id)
   )
 }
+
+/** Keep the JSON payload comfortably below Vercel's request body limit. */
+export const MAX_PHOTO_BYTES = 2 * 1024 * 1024
+export const MAX_PHOTO_REQUEST_BYTES = 3 * 1024 * 1024
+export const photoImageSchema = z
+  .object({
+    mimeType: z.enum(["image/jpeg", "image/png", "image/webp"]),
+    base64: z
+      .string()
+      .min(4)
+      .max(Math.ceil(MAX_PHOTO_BYTES / 3) * 4),
+  })
+  .strict()
+export const photoInterpretInputSchema = z
+  .object({
+    date: dateSchema,
+    version: z.number().int().nonnegative(),
+    image: photoImageSchema,
+    text: z.string().trim().max(1000).default(""),
+  })
+  .strict()
+export type PhotoImage = z.infer<typeof photoImageSchema>
+export type PhotoInterpretInput = z.infer<typeof photoInterpretInputSchema>

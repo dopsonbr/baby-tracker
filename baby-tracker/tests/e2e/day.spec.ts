@@ -89,20 +89,20 @@ test("share surface is compact, readable, and free of app navigation", async ({
 }) => {
   await page.getByRole("button", { name: "Open share view" }).click()
   await expect(
-    page.getByRole("heading", { name: "Beckett’s little day" })
+    page.getByRole("heading", { name: "Beckett’s Full Day" })
   ).toBeVisible()
   await expect(
     page.getByRole("navigation", { name: "Main navigation" })
   ).toHaveCount(0)
-  await expect(page.locator(".share-sheet")).toContainText("14.5")
-  await expect(page.locator(".share-sheet")).toContainText("STILL TO COME")
+  await expect(page.locator(".paper-sheet")).toContainText("14.5")
+  await expect(page.locator(".paper-sheet")).toContainText("What’s next")
   expect(
     await page.evaluate(
       () => document.documentElement.scrollWidth <= window.innerWidth
     )
   ).toBe(true)
-  const sheet = await page.locator(".share-sheet").boundingBox()
-  expect(sheet?.height).toBeLessThan(900)
+  const sheet = await page.locator(".paper-sheet").boundingBox()
+  expect(sheet?.height).toBeLessThan(1500)
   await page.screenshot({
     path: "test-results/share-mobile.png",
     fullPage: true,

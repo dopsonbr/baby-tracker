@@ -1,6 +1,6 @@
 # Beckett
 
-A single, private family app: Today, Growth, History, and Settings. Today combines a feeding-goal bottle, completed and planned moments, quick entry, natural-language review, and browser dictation. Share view is a separate portrait-friendly surface for screenshots; it does not publish a public link.
+A single, private family app: Today, Growth, History, and Settings. Today combines a feeding-goal bottle, completed and planned moments, quick entry, natural-language review, browser dictation, and whiteboard camera/upload scanning. Share view is a separate illustrated day sheet with an activity table, caregiver notes, and pastel tips. Tips default on; the toggle hides the outside panels while preserving activity notes and totals. Save picture creates a complete high-resolution PNG locally, including long days; compatible phones can then share that file through the native share sheet. No public link is published.
 
 ## Local setup
 
@@ -83,4 +83,22 @@ The repository has a manifest and scalable app icon as groundwork for an install
 
 Growth retains measurement history, percentile trends, velocity and exploratory scenarios. Bundled WHO/CDC reference tables and calculation notes are documented beside the data in `apps/web/src/lib/`. Scenarios are illustrations, not individual medical predictions.
 
-The original Beckett Day and Growth Tracker sites were inspected read-only to preserve their concepts. They are not replaced or modified by this deployment. Historical data is not automatically scraped or migrated; import should preserve exact stored units, original feeding goals and any review flags (including the old head-circumference unit note).
+The original Beckett Day and Growth Tracker sites remain unchanged. On September 16, their owner records were imported into the separate development and production databases: five days, 47 activities and six measurements. Import preserves feeding goals, completed/planned status, caregiver notes, measurement sources and the head-circumference review flag. Other viewers' duplicate records were excluded. The September 15 schedule is the saved reference-derived schedule, with its original statuses retained. Original photo files remain on the old site. Raw records and import receipts are private local files excluded from Git and deployments; there is no automatic synchronization.
+
+### Whiteboard photos
+
+Take a photo opens the device camera where supported; Upload a photo accepts JPEG, PNG or WebP. The browser strips metadata and resizes the image before sending at most 2 MiB to the authenticated Luna endpoint. Photos are processed temporarily, not stored. The reader uses the selected day, detects conflicting visible dates, avoids double-counting B/F/N breakdowns, and asks about unmeasured nursing or unclear text. Scan board returns a proposal; only Confirm & save writes records. Photo scanning is unavailable in the synthetic local demo. Real camera hardware and the native OS share sheet still need device verification.
+
+### Importing an existing private tracker
+
+The legacy importer accepts a private normalized JSON payload with `source`, `profile`, dated `days` (including original goals, caregiver notes and events with `legacyKey`), and `measurements` (including source, notes, review flags and `legacyKey`). Keep this payload and raw backups outside tracked source. Use a distinct database environment file for the intended target, and apply migrations first.
+
+From `baby-tracker/apps/api`, review a dry-run (the default), using absolute paths for the environment and private payload files:
+
+```sh
+pnpm exec tsx --env-file=/absolute/path/to/.env.test.local src/import-legacy-cli.ts --file /absolute/private/import.json --target development
+```
+
+Run the identical command with `--apply` only after reviewing its counts, target label and payload hash. For the production database, select its environment file and use `--target production`. The label records intent; the loaded `DATABASE_URL` determines the actual database. Neither credentials nor personal record contents are printed.
+
+Imports run in one transaction with deterministic UUIDs and per-source receipts/provenance. Conflicting populated days, measurements or profile values cause the entire import to fail. Only a missing birthday and untouched empty days with matching goals may be filled. Historical daily goals and caregiver notes are retained. A repeated source and identical normalized payload skips all writes, including records edited or deleted after import; reusing that source with changed contents is rejected. The database's existing numeric precision is retained (weight to 0.001 kg, length/head to 0.01 cm, feed amounts to 0.01 oz); retain the private raw-source backup for original units and precision.

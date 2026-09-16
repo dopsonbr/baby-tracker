@@ -6,6 +6,9 @@ import {
   measurementInputSchema,
   profileInputSchema,
   dateInTimezone,
+  photoInterpretInputSchema,
+  MAX_PHOTO_REQUEST_BYTES,
+  type PhotoInterpretInput,
   type InterpretInput,
   type Snapshot,
   type Proposal,
@@ -14,11 +17,16 @@ import { authenticate } from "./auth.js"
 import { createDatabase } from "./db.js"
 import { ApiError } from "./errors.js"
 import { interpret } from "./interpret.js"
+import { interpretPhoto, decodePhoto } from "./photo.js"
 import { createRepository, type Repository } from "./repository.js"
 interface Dependencies {
   authenticate: (request: Request) => Promise<string>
   repository: Repository
   interpret: (input: InterpretInput, state: Snapshot) => Promise<Proposal>
+  interpretPhoto?: (
+    input: PhotoInterpretInput,
+    state: Snapshot
+  ) => Promise<Proposal>
 }
 const response = (data: unknown, status = 200) =>
   Response.json(data, {
@@ -28,7 +36,7 @@ const response = (data: unknown, status = 200) =>
       "X-Content-Type-Options": "nosniff",
     },
   })
-async function readJson(request: Request): Promise<unknown> {
+async function readJson(request: Request, limit = 16384): Promise<unknown> {
   if (!request.headers.get("content-type")?.includes("application/json"))
     throw new ApiError(415, "invalid_content_type", "Send this update as JSON.")
   const reader = request.body?.getReader()
@@ -39,7 +47,7 @@ async function readJson(request: Request): Promise<unknown> {
     const { done, value } = await reader.read()
     if (done) break
     size += value.byteLength
-    if (size > 16384) {
+    if (size > limit) {
       await reader.cancel()
       throw new ApiError(413, "too_large", "This update is too long.")
     }
@@ -79,6 +87,36 @@ export function createHandler(dependencies: Dependencies) {
             502,
             "interpretation_unavailable",
             "We could not interpret that update. Please try again or use a quick entry."
+          )
+        }
+      }
+      if (path === "/api/interpret-photo" && request.method === "POST") {
+        const input = photoInterpretInputSchema.parse(
+          await readJson(request, MAX_PHOTO_REQUEST_BYTES)
+        )
+        decodePhoto(input.image)
+        const state = await dependencies.repository.getState(input.date)
+        if (state.day.version !== input.version)
+          throw new ApiError(
+            409,
+            "stale_version",
+            "This day changed. Refresh before scanning your photo again."
+          )
+        await dependencies.repository.takeInterpretationToken(actor)
+        if (!dependencies.interpretPhoto)
+          throw new ApiError(
+            503,
+            "photo_unavailable",
+            "Photo scanning is not configured."
+          )
+        try {
+          return response(await dependencies.interpretPhoto(input, state))
+        } catch (error) {
+          if (error instanceof ApiError) throw error
+          throw new ApiError(
+            502,
+            "photo_unavailable",
+            "We could not read that photo. Try a clearer picture or add the entry manually."
           )
         }
       }
@@ -162,4 +200,5 @@ export const handler = createHandler({
   authenticate,
   repository: createRepository(createDatabase()),
   interpret,
+  interpretPhoto,
 })

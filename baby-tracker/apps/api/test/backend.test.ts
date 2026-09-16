@@ -54,6 +54,7 @@ before(async () => {
     "001_initial.sql",
     "002_feed_amount_required.sql",
     "003_ai_rate_limits.sql",
+    "004_legacy_import.sql",
   ])
     await pg.exec(
       await readFile(new URL(`../migrations/${file}`, import.meta.url), "utf8")
@@ -477,5 +478,167 @@ test("banned or locked users are denied even with verified allowlisted Google ac
   assert.equal(
     isAllowedGoogleUser({ ...user, locked: true }, ["parent@gmail.com"]),
     false
+  )
+})
+
+test("photo validation rejects spoofed format, remote URL, malformed base64, and oversized payloads", async () => {
+  const { decodePhoto } = await import("../src/photo.js")
+  const { photoInterpretInputSchema, MAX_PHOTO_BYTES } =
+    await import("@workspace/domain")
+  assert.throws(() =>
+    decodePhoto({
+      mimeType: "image/png",
+      base64: Buffer.from("not an image").toString("base64"),
+    })
+  )
+  assert.throws(() =>
+    decodePhoto({
+      mimeType: "image/jpeg",
+      base64: "https://example.com/image.jpg",
+    })
+  )
+  assert.throws(() => decodePhoto({ mimeType: "image/jpeg", base64: "/9j/!" }))
+  assert.throws(
+    () =>
+      decodePhoto({
+        mimeType: "image/jpeg",
+        base64: Buffer.alloc(MAX_PHOTO_BYTES + 1).toString("base64"),
+      }),
+    (error: unknown) => error instanceof ApiError && error.status === 413
+  )
+  assert.equal(
+    photoInterpretInputSchema.safeParse({
+      date: "2026-09-16",
+      version: 0,
+      image: { mimeType: "image/svg+xml", base64: "PHN2Zz4=" },
+    }).success,
+    false
+  )
+})
+test("board proposals deduplicate existing entries, reject destructive edits and double-counted breakdowns", async () => {
+  const { validatePhotoProposal } = await import("../src/photo.js")
+  const state = await apply([{ action: "add", event: feed }])
+  const exact = validatePhotoProposal(
+    {
+      summary: "5 oz",
+      questions: [],
+      operations: [{ action: "add", event: feed }],
+    },
+    state
+  )
+  assert.equal(exact.operations.length, 0)
+  const conflict = validatePhotoProposal(
+    {
+      summary: "4 oz",
+      questions: [],
+      operations: [{ action: "add", event: { ...feed, amountOz: 4 } }],
+    },
+    state
+  )
+  assert.ok(conflict.questions.length)
+  assert.equal(conflict.operations.length, 0)
+  const destructive = validatePhotoProposal(
+    {
+      summary: "Delete feed",
+      questions: [],
+      operations: [{ action: "delete", id: state.day.events[0]!.id }],
+    },
+    state
+  )
+  assert.equal(destructive.operations.length, 0)
+  const empty = { ...state, day: { ...state.day, events: [] } }
+  const breakdown = validatePhotoProposal(
+    {
+      summary: "B2 F3 Total5",
+      questions: [],
+      operations: [2, 3, 5].map((amountOz) => ({
+        action: "add",
+        event: { ...feed, amountOz },
+      })),
+    },
+    empty
+  )
+  assert.equal(breakdown.operations.length, 0)
+  assert.ok(breakdown.questions.length)
+  const duplicateNotes = validatePhotoProposal(
+    {
+      summary: "One feed twice",
+      questions: [],
+      operations: [
+        { action: "add", event: feed },
+        { action: "add", event: { ...feed, note: "B2 + F3" } },
+      ],
+    },
+    empty
+  )
+  assert.equal(duplicateNotes.operations.length, 1)
+  const nursing = validatePhotoProposal(
+    {
+      summary: "Nursing volume unclear",
+      questions: ["How many measured ounces for N?"],
+      operations: [{ action: "add", event: feed }],
+    },
+    empty
+  )
+  assert.equal(nursing.operations.length, 0)
+})
+test("photo API authenticates, checks stale versions, and returns review without writes", async () => {
+  let calls = 0
+  const { readFile } = await import("node:fs/promises")
+  const image = {
+    mimeType: "image/png",
+    base64: (
+      await readFile(
+        new URL("../../../tests/fixtures/whiteboard.png", import.meta.url)
+      )
+    ).toString("base64"),
+  }
+  const handler = createHandler({
+    authenticate: async () => "parent_1",
+    repository,
+    interpret: async () => {
+      throw Error("unused")
+    },
+    interpretPhoto: async () => {
+      calls++
+      return {
+        summary: "5 oz at 08:15 AM",
+        questions: [],
+        operations: [{ action: "add", event: feed }],
+      }
+    },
+  })
+  const request = (body: unknown) =>
+    new Request("http://localhost/api/interpret-photo", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(body),
+    })
+  assert.equal(
+    (await handler(request({ date: "2026-09-16", version: 1, image }))).status,
+    409
+  )
+  assert.equal(calls, 0)
+  const result = await handler(
+    request({ date: "2026-09-16", version: 0, image })
+  )
+  assert.equal(result.status, 200)
+  assert.equal(calls, 1)
+  assert.equal((await repository.getState("2026-09-16")).day.events.length, 0)
+  const denied = createHandler({
+    authenticate: async () => {
+      throw new ApiError(401, "unauthenticated", "Sign in")
+    },
+    repository,
+    interpret: async () => {
+      throw Error("unused")
+    },
+    interpretPhoto: async () => {
+      throw Error("must not call")
+    },
+  })
+  assert.equal(
+    (await denied(request({ date: "2026-09-16", version: 0, image }))).status,
+    401
   )
 })

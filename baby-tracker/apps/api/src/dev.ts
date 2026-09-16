@@ -1,5 +1,6 @@
 import { createServer } from "node:http"
 import { handler } from "./handler.js"
+import { MAX_PHOTO_REQUEST_BYTES } from "@workspace/domain"
 const port = Number(process.env.API_PORT ?? 3001)
 createServer(async (req, res) => {
   try {
@@ -7,7 +8,7 @@ createServer(async (req, res) => {
     let size = 0
     for await (const chunk of req) {
       size += chunk.length
-      if (size > 16384) {
+      if (size > MAX_PHOTO_REQUEST_BYTES) {
         res.writeHead(413)
         res.end("Request too large")
         return

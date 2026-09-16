@@ -10,8 +10,6 @@ import {
 } from "react"
 import type { CSSProperties, FormEvent, ReactNode } from "react"
 import {
-  ArrowDown,
-  ArrowLeft,
   ArrowRight,
   Baby,
   Check,
@@ -39,6 +37,7 @@ import type {
   Operation,
   Profile,
   Proposal,
+  PhotoImage,
   Snapshot,
 } from "@workspace/domain"
 import {
@@ -55,6 +54,8 @@ import {
 } from "./api"
 import { browserTranscription } from "./voice"
 import "./app.css"
+import { ShareView } from "./components/ShareView"
+import { PhotoInput } from "./components/PhotoInput"
 
 const Growth = lazy(() => import("./components/Growth"))
 type Tab = "today" | "growth" | "history" | "settings"
@@ -109,6 +110,8 @@ export function App({
   const loadGeneration = useRef(0)
   const lastCalendarDay = useRef<string | null>(null)
   const [proposalDate, setProposalDate] = useState<string | null>(null)
+  const [proposalSource, setProposalSource] = useState<"text" | "photo">("text")
+  const [photoReset, setPhotoReset] = useState(0)
   const [proposalVersion, setProposalVersion] = useState<number | null>(null)
   const load = useCallback(
     async (date?: string) => {
@@ -258,6 +261,7 @@ export function App({
       )
       if (generation !== loadGeneration.current) return
       setProposal(result)
+      setProposalSource("text")
       setProposalVersion(snapshot.day.version)
       setProposalDate(snapshot.day.date)
     } catch (cause) {
@@ -265,6 +269,34 @@ export function App({
         cause instanceof Error
           ? cause.message
           : "Could not interpret that. You can add it manually."
+      )
+    } finally {
+      setBusy(false)
+    }
+  }
+  async function scanPhoto(image: PhotoImage, clarification: string) {
+    if (!snapshot || busy) return
+    setBusy(true)
+    setError("")
+    setProposal(null)
+    try {
+      const generation = loadGeneration.current
+      const result = await api.interpretPhoto(
+        snapshot.day.date,
+        snapshot.day.version,
+        image,
+        clarification
+      )
+      if (generation !== loadGeneration.current) return
+      setProposal(result)
+      setProposalSource("photo")
+      setProposalVersion(snapshot.day.version)
+      setProposalDate(snapshot.day.date)
+    } catch (cause) {
+      setError(
+        cause instanceof Error
+          ? cause.message
+          : "Could not read that photo. Try a clearer picture or add it manually."
       )
     } finally {
       setBusy(false)
@@ -561,6 +593,13 @@ export function App({
                   sending.
                 </p>
               )}
+              <PhotoInput
+                key={`${day.date}:${photoReset}`}
+                busy={busy}
+                sample={isSampleMode}
+                onScan={scanPhoto}
+                onChange={() => setProposal(null)}
+              />
               {proposal && (
                 <div className="proposal" aria-live="polite">
                   <div className="proposal-heading">
@@ -604,8 +643,9 @@ export function App({
                   )}
                   {proposal.questions.length > 0 ? (
                     <p className="field-hint">
-                      Add the missing detail to your message above, then review
-                      again.
+                      {proposalSource === "photo"
+                        ? "Add the missing detail in the photo’s clarification field and scan again, or add the entry manually."
+                        : "Add the missing detail to your message above, then review again."}
                     </p>
                   ) : (
                     <Button
@@ -623,6 +663,8 @@ export function App({
                         ) {
                           setProposal(null)
                           setText("")
+                          if (proposalSource === "photo")
+                            setPhotoReset((value) => value + 1)
                         }
                       }}
                     >
@@ -1372,106 +1414,5 @@ function SettingsView({
       )}
       <p className="app-version">BECKETT · MADE FOR THE EVERYDAY</p>
     </section>
-  )
-}
-
-function ShareView({
-  profile,
-  day,
-  onClose,
-}: {
-  profile: Profile
-  day: Day
-  onClose: () => void
-}) {
-  const events = sortedEvents(day.events)
-  const completed = events.filter((event) => event.status === "completed")
-  const planned = events.filter((event) => event.status === "planned")
-  const total = totalOz(day)
-  return (
-    <main className="share-page">
-      <div className="share-toolbar">
-        <Button variant="ghost" size="sm" onClick={onClose}>
-          <ArrowLeft /> Back
-        </Button>
-        <span>
-          Ready for a screenshot <ArrowDown size={13} />
-        </span>
-        <Button variant="ghost" size="sm" onClick={() => window.print()}>
-          Print
-        </Button>
-      </div>
-      <article className="share-sheet">
-        <header className="share-heading">
-          <div>
-            <div className="share-wordmark">
-              <Sprout size={17} /> beckett.
-            </div>
-            <h1>{profile.name}’s little day</h1>
-            <p>{formatDate(day.date)}</p>
-          </div>
-          <Sun className="share-sun" />
-        </header>
-        {isSampleMode && (
-          <div className="share-sample">SAMPLE DAY · NOT REAL RECORDS</div>
-        )}
-        <section className="share-summary">
-          <div>
-            <span className="section-kicker">BOTTLES & LITTLE DREAMS</span>
-            <div className="share-ounces">
-              <strong>{total}</strong>
-              <span> / {day.goalOz} oz</span>
-            </div>
-            <div className="progress-track">
-              <span
-                style={{
-                  width: `${Math.min(100, (total / day.goalOz) * 100)}%`,
-                }}
-              />
-            </div>
-            <p>
-              {completed.filter((event) => event.type === "feed").length}{" "}
-              bottles <span>·</span> {formatDuration(sleepTotal(day))} sleep
-            </p>
-          </div>
-          <Bottle small progress={total / day.goalOz} />
-        </section>
-        <section className="share-events">
-          <h2>
-            <Check size={13} /> THE DAY SO FAR{" "}
-            <span>{completed.length} moments</span>
-          </h2>
-          {completed.length ? (
-            completed.map((event) => <EventRow key={event.id} event={event} />)
-          ) : (
-            <p className="share-empty">
-              A fresh start. Little moments to come.
-            </p>
-          )}
-        </section>
-        {planned.length > 0 && (
-          <section className="share-events share-planned">
-            <h2>
-              <Clock3 size={13} /> STILL TO COME <span>the plan</span>
-            </h2>
-            {planned.map((event) => (
-              <EventRow key={event.id} event={event} />
-            ))}
-          </section>
-        )}
-        <footer>
-          <Heart size={12} />
-          <span>A little day. A lot of love.</span>
-          <span>
-            {profile.timezone.replaceAll("_", " ").split("/").at(-1)} time
-          </span>
-        </footer>
-      </article>
-      <p className="screenshot-tip">
-        Take a screenshot to share with your little circle.
-        <br />
-        Longer days may need more than one screenshot.
-      </p>
-    </main>
   )
 }

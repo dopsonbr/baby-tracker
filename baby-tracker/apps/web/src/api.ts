@@ -8,6 +8,7 @@ import type {
   MeasurementInput,
   Operation,
   Profile,
+  PhotoImage,
   Proposal,
   Snapshot,
 } from "@workspace/domain"
@@ -231,6 +232,25 @@ export function createApi(getToken?: () => Promise<string | null>) {
       isSampleMode
         ? Promise.resolve(sampleInterpret(text))
         : request<Proposal>("interpret", "POST", { date, text, version }),
+    interpretPhoto: (
+      date: string,
+      version: number,
+      image: PhotoImage,
+      text: string
+    ) =>
+      isSampleMode
+        ? Promise.reject(
+            new ApiError(
+              "Photo scanning is available in the signed-in app. This sample stays on your device.",
+              503
+            )
+          )
+        : request<Proposal>("interpret-photo", "POST", {
+            date,
+            version,
+            image,
+            text,
+          }),
     profile: (profile: Omit<Profile, "id">, date: string) => {
       if (!isSampleMode)
         return request<Snapshot>(`profile?date=${date}`, "PATCH", profile)
